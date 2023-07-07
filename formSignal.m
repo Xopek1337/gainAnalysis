@@ -1,10 +1,10 @@
-function [signal] = formSignal(snr, data, modOrder, h, sps)
+function [signal] = formSignal(snr, data, modOrder, h, sps, ampl)
     dataSym = bi2de(data);
     modData = qammod(dataSym, modOrder, 'UnitAveragePower' , true);
 
     output = upsample(modData, sps);
     
-    signal = conv(h, output);
+    signal = ampl * conv(h, output);
     varSignal = var(signal);
 
     varNoise = varSignal*10^(-snr/10);
