@@ -15,7 +15,7 @@ modOrder = 2^M; % Порядок модуляции
 
 dataConstell = randi([0 1], 5000, M); % Случайная последовательность бит для построения сигнальных созвездий
 constSNR = 60; % ОСШ для построения сигнальных созвездий
-disp(bi2de(dataConstell));
+
 % Вычисление импульсной характеристики фильтра Найквиста
 h(:,1) = createH(L, Ts, T, beta);
 
@@ -31,7 +31,7 @@ ccdf = [];
 
 idealConstell = 30*ampl*qamMod(0:modOrder-1, modOrder, M);
 
-signal = formSignal(constSNR, dataConstell, modOrder, h, sps, ampl);
+signal = formSignal(constSNR, dataConstell, modOrder, h, sps, ampl, M);
 
 b = [.7692, 0.1538, 0.0769, 0.0342];
 a = [1,0,0,0];
@@ -40,11 +40,11 @@ a = [1,0,0,0];
 
 rightDataOut = data_out( (L+1)/2:end-(L+1)/2 );
 
-samples = downsample(rightDataOut, sps);
+samples = rightDataOut(1:sps:end);
 
 rightDataOut2 = signal( (L+1)/2:end-(L+1)/2 );
 
-samples2 = downsample(rightDataOut2, sps);
+samples2 = rightDataOut2(1:sps:end);
 
 len=length(data_out);
 n=2^nextpow2(len);
@@ -73,14 +73,14 @@ hold off;
 xlabel('I'); ylabel('Q'); legend('Символы на выходе усилителя', 'Символы на идеальном созвездии', 'Символы при линейном усилении');
 
 for i=1:length(ampls)
-    sig = formSignal(constSNR, dataConstell, modOrder, h, sps, ampls(i));
+    sig = formSignal(constSNR, dataConstell, modOrder, h, sps, ampls(i), M);
     idealCons = 30*ampls(i)*qamMod(0:15, modOrder, M);
     
     [sigOut, ro, fi] = gain(a, b, sig);
     
     rightSigOut = sigOut( (L+1)/2:end-(L+1)/2 );
 
-    samplesOut = downsample(rightSigOut, sps);
+    samplesOut = rightSigOut(1:sps:end);
     
     FFTYOut = calcSpectrum(sigOut);
     
