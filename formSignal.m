@@ -1,8 +1,12 @@
-function [signal] = formSignal(snr, data, modOrder, h, sps, ampl)
+function [signal] = formSignal(snr, data, modOrder, h, sps, ampl, M)
     dataSym = bi2de(data);
-    modData = qammod(dataSym, modOrder, 'UnitAveragePower' , true);
-
-    output = upsample(modData, sps);
+    modData = qamMod(dataSym, modOrder, M);
+    
+    output = zeros(length(data)*sps, 1);
+    output(1) = modData(1);
+    for i = 1:length(modData)-1
+       output(sps*i+1) = modData(i+1); 
+    end
     
     signal = ampl * conv(h, output);
     varSignal = var(signal);
