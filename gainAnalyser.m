@@ -160,9 +160,7 @@ classdef gainAnalyser
                 len=length(sigOutGMP);
                 n=2^nextpow2(len);
                 
-                rightSigOut = sigOutGMP( (L+1)/2:end-(L+1)/2 );
-            
-                samplesOut = rightSigOut(1:sps:end);
+                samplesOut = sigOutGMP(1:sps:end);
                 
                 FFTYOut = obj.calcSpectrum(sigOutGMP);
                 
