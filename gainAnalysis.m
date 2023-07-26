@@ -1,4 +1,4 @@
-%clc; clear;
+clc; clear;
 close all
 
 Fs = 1e7;   % частота дискретизации 
@@ -13,36 +13,27 @@ M = 4; % Число бит на символ
 
 modOrder = 2^M; % Порядок модуляции
 
+dataConstell = randi([0 1], 5000, M); % Случайная последовательность бит для построения сигнальных созвездий
+constSNR = 60; % ОСШ для построения сигнальных созвездий
+
 % Вычисление импульсной характеристики фильтра Найквиста
 h(:,1) = createH(L, Ts, T, beta);
 
-snr = 200;
-nBits = 1000;
-
-data = randi([0 1], nBits, M);
-
 helper = gainAnalyser();
 
+ampl = 0.1;
 ampls(:,1) = (0.05:0.05:1.5);
-ampl = 1.5;
 
+idealConstell = 30*ampl*qamMod(0:modOrder-1, modOrder, M);
 
-signalIn = formSignal(snr, data, modOrder, h, sps, ampl, M);
-    
-modelGMP = GMPV2();
-
-taps = modelGMP.calcFis(signalIn, (L+1)/2);
-
-sigOut2 = taps * model_coeff;
-
-
-idealConstell = ampl*qamMod(0:modOrder-1, modOrder, M);
-
+signalIn = formSignal(constSNR, dataConstell, modOrder, h, sps, ampl, M);
 rightDataIn = signalIn( (L+1)/2:end-(L+1)/2 );
 samplesIn = rightDataIn(1:sps:end);
 
-samplesOut = sigOut2(1:sps:end);
+signalOut = helper.gain(signalIn);
+rightDataOut = signalOut( (L+1)/2:end-(L+1)/2 );
+samplesOut = rightDataOut(1:sps:end);
 
-[evms, aclrs, paprs] = helper.calcResGMP(snr, data, modOrder, h, sps, ampls, M, L, Bw, Fs, model_coeff, v2);
+[evms, aclrs, paprs] = helper.calcResSaleh(constSNR, dataConstell, modOrder, h, sps, ampls, M, L, Bw, Fs);
 
-helper.plotResGMP(ampls, aclrs, evms, paprs, circshift(rightDataIn,1), sigOut2, Fs, samplesOut, samplesIn, idealConstell);
+helper.plotResSaleh(ampls, aclrs, evms, paprs, signalIn, signalOut, samplesOut, samplesIn, idealConstell, Fs);
