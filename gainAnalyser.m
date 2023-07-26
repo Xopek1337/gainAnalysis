@@ -144,14 +144,13 @@ classdef gainAnalyser
             xlabel('Амплитуда на входе');ylabel('Фаза на выходе GMP усилителя');
         end
 
-        function [evms, aclrs, paprs, nmse] = calcResGMP(obj, constSNR, dataConstell, modOrder, h, sps, ampls, M, L, Bw, Fs, coeffs, modelGMP)
+        function [evms, aclrs, paprs] = calcResGMP(obj, constSNR, dataConstell, modOrder, h, sps, ampls, M, L, Bw, Fs, coeffs, modelGMP)
             for i=1:length(ampls)
                 sig = formSignal(constSNR, dataConstell, modOrder, h, sps, ampls(i), M);
                 
-                idealCons = 30*ampls(i)*qamMod(0:15, modOrder, M);
+                idealCons = ampls(i)*qamMod(0:15, modOrder, M);
                 
-                [Fal, Flag, Flead] = modelGMP.calcFis(sig, (L+1)/2);
-                F = [Fal, Flag, Flead];
+                F = modelGMP.calcFis(sig, (L+1)/2);
                 sigOutGMP = F * coeffs;
 
                 sigOutSaleh = obj.gain(sig);
@@ -167,11 +166,10 @@ classdef gainAnalyser
                 evms(i) = obj.calcEVM(samplesOut, idealCons);
                 aclrs(i) = obj.calcACLR(abs(FFTYOut).^2, n, Bw, Fs);
                 paprs(i) = obj.calcPAPR(sigOutGMP);
-                nmse(i) = norm(sigOutSaleh - sigOutGMP)^2 / norm(sigOutSaleh)^2;
             end
         end
 
-        function [] = plotResGMP(obj, ampls, aclrs, evms, paprs, nmse, sigIn, sigOut)
+        function [] = plotResGMP(obj, ampls, aclrs, evms, paprs, sigIn, sigOut, Fs, samplesOut, samplesIn, idealConstell)
             figure(1);
             plot(ampls, aclrs);
             xlabel('Амплитуда');ylabel('ACLR, дБ');
@@ -189,20 +187,44 @@ classdef gainAnalyser
             xlabel('PAPR, дБ');ylabel('CCDF');
 
             figure(5);
-            plot(ampls, nmse);
-            xlabel('Амплитуда на входе');ylabel('NMSE');
-
-            figure(6);
             plot(abs(sigIn), abs(sigOut), '.');
             xlabel('Амплитуда на входе');ylabel('Амплитуда на выходе GMP усилителя');
             
             phase = angle(sigOut) - angle(sigIn);
+            phase = sin(phase);
+            phase = asin(phase);
             %invPhase = find(phase<-6.1);
             %phase(invPhase) = phase(invPhase) + 2*pi;
             
-            figure(7);
+            figure(6);
             plot(abs(sigIn), phase, '.');
             xlabel('Амплитуда на входе');ylabel('Фаза на выходе GMP усилителя');
+
+            len=length(sigOut);
+            n=2^nextpow2(len);
+            
+            FFTYOut = obj.calcSpectrum(sigOut);
+            FFTYIn = obj.calcSpectrum(sigIn);
+            
+            f1=(-n/2:n/2-1)*Fs/n;
+
+            figure(7);
+            FFTYOut = medfilt1(abs(FFTYOut),150,'truncate');
+            FFTYIn = medfilt1(abs(FFTYIn),150,'truncate');
+            
+            plot(f1(2:length(f1)), 20*log10(abs(FFTYOut(2:length(f1)))));
+            hold on;
+            plot(f1(2:length(f1)), 20*log10(abs(FFTYIn(2:length(f1)))));
+            hold off;
+            grid on; xlabel('частота, Гц'); ylabel('магнитуда, дБ'); title('Спектр сигнала'); legend('Спектр на выходе усилителя','Спектр на входе усилителя');
+
+            figure(8);
+            plot(samplesOut, '.');
+            hold on;
+            plot(idealConstell,'*');
+            plot(samplesIn, '.');
+            hold off;
+            xlabel('I'); ylabel('Q'); legend('Символы на выходе усилителя', 'Символы на идеальном созвездии', 'Символы при линейном усилении');
         end
     end
 end
