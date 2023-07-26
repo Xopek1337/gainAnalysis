@@ -1,8 +1,8 @@
-clc; clear;
+%clc; clear;
 close all
 
 Fs = 1e7;   % частота дискретизации 
-sps = 10; % число отсчетов на символ
+sps = 20; % число отсчетов на символ
 L = 71; % длина фильтра (количество отсчетов)
 T = sps/Fs;   % длительность символа
 Ts = 1/Fs;  % период дискретизации
@@ -23,34 +23,26 @@ data = randi([0 1], nBits, M);
 
 helper = gainAnalyser();
 
-modelGMP = GMP();
-
 ampls(:,1) = (0.05:0.05:1.5);
 ampl = 1.5;
 
-b = [.7692, 0.1538, 0.0769, 0.0342];
-a = [1,0,0,0];
 
 signalIn = formSignal(snr, data, modOrder, h, sps, ampl, M);
-
-signalIn2 = formSignal(snr, data, modOrder, h, sps, 0.1, M);
     
-signalOut = helper.gain(signalIn);
-signalOut = signalOut( (L+1)/2:end-(L+1)/2 );
+modelGMP = GMPV2();
 
-[Fal, Flag, Flead] = modelGMP.calcFis(signalIn, (L+1)/2);
-[Fal2, Flag2, Flead2] = modelGMP.calcFis(signalIn2, (L+1)/2);
+taps = modelGMP.calcFis(signalIn, (L+1)/2);
 
-coeffs1 = modelGMP.calcCoeffs(signalOut, Fal);
-coeffs2 = modelGMP.calcCoeffs(signalOut, Flag);
-coeffs3 = modelGMP.calcCoeffs(signalOut, Flead);
+sigOut2 = taps * model_coeff;
 
-F = [Fal, Flag, Flead];
-F2 = [Fal2, Flag2, Flead2];
-coeffs = [coeffs1; coeffs2; coeffs3];
 
-sigOut = F2 * coeffs;
+idealConstell = ampl*qamMod(0:modOrder-1, modOrder, M);
 
-[evms, aclrs, paprs, nmse] = helper.calcResGMP(snr, data, modOrder, h, sps, ampls, M, L, Bw, Fs, coeffs, modelGMP);
+rightDataIn = signalIn( (L+1)/2:end-(L+1)/2 );
+samplesIn = rightDataIn(1:sps:end);
 
-helper.plotResGMP(ampls, aclrs, evms, paprs, nmse, signalIn2( (L+1)/2:end-(L+1)/2 ), sigOut);
+samplesOut = sigOut2(1:sps:end);
+
+[evms, aclrs, paprs] = helper.calcResGMP(snr, data, modOrder, h, sps, ampls, M, L, Bw, Fs, model_coeff, v2);
+
+helper.plotResGMP(ampls, aclrs, evms, paprs, circshift(rightDataIn,1), sigOut2, Fs, samplesOut, samplesIn, idealConstell);
