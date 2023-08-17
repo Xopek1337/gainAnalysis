@@ -1,10 +1,10 @@
-classdef gainAnalyser
+classdef gainAnalyserHelper
     properties
         a {mustBeNumeric}
         b {mustBeNumeric}
     end
     methods
-        function obj = gainAnalyser(a, b)
+        function obj = gainAnalyserHelper(a, b)
             if nargin == 2
                 obj.a = a;
                 obj.b = b;
@@ -30,7 +30,7 @@ classdef gainAnalyser
         end
         
         function [aclr] = calcACLR(obj, spm, n, Bw, Fs)
-            aclr = 10*log10(sum(spm((Fs/2 - Bw/2)/Fs*n : (Fs/2 + Bw/2)/Fs*n)) / sum(spm((Fs/2 - 3*Bw/2)/Fs*n : (Fs/2 - Bw/2)/Fs*n)));
+            aclr = 10*log10(sum(spm((Fs/2 - Bw/2)/Fs*n : (Fs/2 + Bw/2)/Fs*n)) / (sum(spm((Fs/2 - 3*Bw/2)/Fs*n : (Fs/2 - Bw/2)/Fs*n)) + sum(spm((Fs/2 + Bw/2)/Fs*n : (Fs/2 + 3*Bw/2)/Fs*n))));
         end
         
         function [evm] = calcEVM(obj, samples, constell)
@@ -91,15 +91,15 @@ classdef gainAnalyser
         function [] = plotResSaleh(obj, ampls, aclrs, evms, paprs, sigIn, sigOut, samplesOut, samplesIn, idealConstell, Fs)
             figure(1);
             plot(ampls, aclrs);
-            xlabel('Амплитуда');ylabel('ACLR, дБ');
+            xlabel('Средняя мощность входного сигнала');ylabel('ACLR, дБ');
             
             figure(2);
             plot(ampls, evms);
-            xlabel('Амплитуда');ylabel('EVM, дБ');
+            xlabel('Средняя мощность входного сигнала');ylabel('EVM, дБ');
             
             figure(3);
             plot(ampls, paprs);
-            xlabel('Амплитуда на входе');ylabel('PAPR, дБ');
+            xlabel('Средняя мощность входного сигнала');ylabel('PAPR, дБ');
             
             figure(4);
             semilogy((0:0.05:15), obj.calcCCDF(sigOut));
@@ -144,51 +144,87 @@ classdef gainAnalyser
             xlabel('Амплитуда на входе');ylabel('Фаза на выходе GMP усилителя');
         end
 
-        function [evms, aclrs, paprs] = calcResGMP(obj, constSNR, dataConstell, modOrder, h, sps, ampls, M, L, Bw, Fs, coeffs, modelGMP)
+        function [evms, aclrs, paprs, phases, powers] = calcResGMP(obj, constSNR, dataConstell, modOrder, h, sps, ampls, M, L, Bw, Fs, coeffs, modelGMP)
             for i=1:length(ampls)
-                sig = formSignal(constSNR, dataConstell, modOrder, h, sps, ampls(i), M);
+                [sig, modData] = formSignal(constSNR, dataConstell, modOrder, h, sps, ampls(i), M);
+                power =  (sum(abs(sig .^2)) / length(sig));
+
+                sig = [zeros((L)/2, 1); sig; zeros((L)/2, 1)];
                 
-                idealCons = ampls(i)*qamMod(0:15, modOrder, M);
+                idealCons = qamMod(0:15, modOrder, M);
                 
                 F = modelGMP.calcFis(sig, (L+1)/2);
                 sigOutGMP = F * coeffs;
 
-                sigOutSaleh = obj.gain(sig);
-                sigOutSaleh = sigOutSaleh( (L+1)/2:end-(L+1)/2 );
+                sigOutGMPFiltered = conv(h, sigOutGMP);
+
+                sigOutGMPFiltered = sigOutGMPFiltered((L+1):end-(L+1));
 
                 len=length(sigOutGMP);
                 n=2^nextpow2(len);
                 
-                samplesOut = sigOutGMP(1:sps:end);
+                samplesOut = sigOutGMPFiltered(1:sps:end);
+
+                start = pi/4;
+
+                phDelay = start;
+
+                for j = 1:8000
+                    sigOutShifted = abs(sigOutGMPFiltered).*exp(1j.*(angle(sigOutGMPFiltered) - phDelay));
+
+                    phDelay = start-j/5000;
+                    
+                    samplesOutShifted = sigOutShifted(1:sps:end);
+              
+                    samplesOutShifted = samplesOutShifted/sqrt(sum(abs(samplesOutShifted .^2)) / length(samplesOutShifted));
+                
+                    evmsShifted(j) = obj.calcEVM(samplesOutShifted, idealCons);
+                end
+                [valMin, ind] = min(evmsShifted);
+
+                phDelay = start-ind/5000;
+                
+                sigOutShifted = abs(sigOutGMPFiltered).*exp(1j.*(angle(sigOutGMPFiltered) - phDelay));
+
+                samplesOutShifted = sigOutShifted(1:sps:end);
+
+                samplesOutShifted = samplesOutShifted/sqrt(sum(abs(samplesOutShifted .^2)) / length(samplesOutShifted));
                 
                 FFTYOut = obj.calcSpectrum(sigOutGMP);
-                
-                evms(i) = obj.calcEVM(samplesOut, idealCons);
+
+                powers(i) = power;
+                phases(i) = phDelay;
+                evms(i) = obj.calcEVM(samplesOutShifted, idealCons);
                 aclrs(i) = obj.calcACLR(abs(FFTYOut).^2, n, Bw, Fs);
                 paprs(i) = obj.calcPAPR(sigOutGMP);
             end
         end
 
-        function [] = plotResGMP(obj, ampls, aclrs, evms, paprs, sigIn, sigOut, Fs, samplesOut, samplesIn, idealConstell)
+        function [] = plotResGMP(obj, aclrs, evms, paprs, sigIn, sigOut, Fs, samplesOut, idealConstell, phases, powers)
             figure(1);
-            plot(ampls, aclrs);
-            xlabel('Амплитуда');ylabel('ACLR, дБ');
+            plot(powers, aclrs);
+            grid on;
+            xlabel('Средняя мощность входного сигнала');ylabel('ACLR, дБ');
             
             figure(2);
-            plot(ampls, evms);
-            xlabel('Амплитуда');ylabel('EVM, дБ');
+            plot(powers, evms);
+            grid on;
+            xlabel('Средняя мощность входного сигнала');ylabel('EVM, дБ');
             
             figure(3);
-            plot(ampls, paprs);
-            xlabel('Амплитуда на входе');ylabel('PAPR, дБ');
+            plot(powers, paprs);
+            grid on;
+            xlabel('Средняя мощность входного сигнала');ylabel('PAPR, дБ');
             
             figure(4);
             semilogy((0:0.05:15), obj.calcCCDF(sigOut));
-            xlabel('PAPR, дБ');ylabel('CCDF');
+            grid on;
+            xlabel('дБ выше средней мощности');ylabel('CCDF');
 
             figure(5);
             plot(abs(sigIn), abs(sigOut), '.');
-            xlabel('Амплитуда на входе');ylabel('Амплитуда на выходе GMP усилителя');
+            grid on;
+            xlabel('Мгновенная амплитуда на входе');ylabel('Мгновенная амплитуда на выходе GMP усилителя');
             
             phase = angle(sigOut) - angle(sigIn);
             phase = sin(phase);
@@ -198,7 +234,8 @@ classdef gainAnalyser
             
             figure(6);
             plot(abs(sigIn), phase, '.');
-            xlabel('Амплитуда на входе');ylabel('Фаза на выходе GMP усилителя');
+            grid on;
+            xlabel('Мгновенная амплитуда на входе');ylabel('Мгновенная фаза на выходе GMP усилителя');
 
             len=length(sigOut);
             n=2^nextpow2(len);
@@ -220,11 +257,11 @@ classdef gainAnalyser
 
             figure(8);
             plot(samplesOut, '.');
+            grid on;
             hold on;
             plot(idealConstell,'*');
-            plot(samplesIn, '.');
             hold off;
-            xlabel('I'); ylabel('Q'); legend('Символы на выходе усилителя', 'Символы на идеальном созвездии', 'Символы при линейном усилении');
+            xlabel('I'); ylabel('Q'); legend('Символы на выходе усилителя', 'Символы на идеальном созвездии');
         end
     end
 end
